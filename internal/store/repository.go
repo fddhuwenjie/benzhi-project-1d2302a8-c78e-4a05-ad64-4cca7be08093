@@ -40,14 +40,14 @@ func (r *Repository) GetCase(id string) (CaseData, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if cached, ok := r.caseCache[id]; ok {
-		return cached, nil
+		return cloneCaseData(cached), nil
 	}
 	c, ok := r.data.Cases[id]
 	if !ok {
 		return CaseData{}, domain.ErrNotFound
 	}
 	data := r.caseDataLocked(c)
-	r.caseCache[id] = data
+	r.caseCache[id] = cloneCaseData(data)
 	return data, nil
 }
 
@@ -62,18 +62,22 @@ func (r *Repository) FindByShipment(code string) (CaseData, error) {
 }
 
 func (r *Repository) caseDataLocked(c domain.TransitCase) CaseData {
-	d := CaseData{Case: c, Readings: append([]domain.TemperatureReading(nil), r.data.Readings[c.ID]...), Actions: append([]domain.CorrectiveAction(nil), r.data.Actions[c.ID]...)}
+	d := CaseData{
+		Case:     c,
+		Readings: cloneReadings(r.data.Readings[c.ID]),
+		Actions:  cloneActions(r.data.Actions[c.ID]),
+	}
 	sort.Slice(d.Readings, func(i, j int) bool { return d.Readings[i].RecordedAt.Before(d.Readings[j].RecordedAt) })
 	if v, ok := r.data.Evidence[c.ID]; ok {
 		copy := v
 		d.Evidence = &copy
 	}
 	if v, ok := r.data.Assessments[c.ID]; ok {
-		copy := v
+		copy := cloneAssessment(v)
 		d.Assessment = &copy
 	}
 	if v, ok := r.data.Investigations[c.ID]; ok {
-		copy := v
+		copy := cloneInvestigation(v)
 		d.Investigation = &copy
 	}
 	return d
@@ -184,6 +188,137 @@ func cloneSnapshot(in snapshot) snapshot {
 	raw, _ := json.Marshal(in)
 	out := emptySnapshot()
 	_ = json.Unmarshal(raw, &out)
+	return out
+}
+
+// cloneCaseData returns a deep copy of a CaseData so that callers cannot mutate
+// nested mutable fields (slices, maps, pointer-backed structs) shared with the
+// repository cache or the persisted snapshot.
+func cloneCaseData(in CaseData) CaseData {
+	out := CaseData{
+		Case:             in.Case,
+		Readings:         cloneReadings(in.Readings),
+		Actions:          cloneActions(in.Actions),
+		EvidenceProgress: in.EvidenceProgress,
+		Deadline:         in.Deadline,
+	}
+	if in.Evidence != nil {
+		copy := *in.Evidence
+		out.Evidence = &copy
+	}
+	if in.Assessment != nil {
+		copy := cloneAssessment(*in.Assessment)
+		out.Assessment = &copy
+	}
+	if in.Investigation != nil {
+		copy := cloneInvestigation(*in.Investigation)
+		out.Investigation = &copy
+	}
+	return out
+}
+
+func cloneReadings(in []domain.TemperatureReading) []domain.TemperatureReading {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.TemperatureReading, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneActions(in []domain.CorrectiveAction) []domain.CorrectiveAction {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.CorrectiveAction, len(in))
+	for i, a := range in {
+		out[i] = a
+		out[i].EvidenceRefs = cloneStrings(a.EvidenceRefs)
+		out[i].IssueResolutions = cloneIssueResolutions(a.IssueResolutions)
+		out[i].VerificationIssues = cloneVerificationIssues(a.VerificationIssues)
+	}
+	return out
+}
+
+func cloneStrings(in []string) []string {
+	if in == nil {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneIssueResolutions(in []domain.IssueResolution) []domain.IssueResolution {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.IssueResolution, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneVerificationIssues(in []domain.VerificationIssue) []domain.VerificationIssue {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.VerificationIssue, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneAssessment(in domain.DeviationAssessment) domain.DeviationAssessment {
+	out := in
+	out.Triggers = cloneStrings(in.Triggers)
+	out.TriggerDetails = cloneAssessmentTriggers(in.TriggerDetails)
+	out.Excursions = cloneExcursions(in.Excursions)
+	out.LowTemperature = cloneDirectionalStats(in.LowTemperature)
+	out.HighTemperature = cloneDirectionalStats(in.HighTemperature)
+	out.MissingWindows = cloneMissingWindows(in.MissingWindows)
+	return out
+}
+
+func cloneAssessmentTriggers(in []domain.AssessmentTrigger) []domain.AssessmentTrigger {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.AssessmentTrigger, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneExcursions(in []domain.Excursion) []domain.Excursion {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.Excursion, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneDirectionalStats(in domain.DirectionalExcursionStats) domain.DirectionalExcursionStats {
+	out := in
+	out.Intervals = cloneExcursions(in.Intervals)
+	return out
+}
+
+func cloneMissingWindows(in []domain.MissingWindow) []domain.MissingWindow {
+	if in == nil {
+		return nil
+	}
+	out := make([]domain.MissingWindow, len(in))
+	copy(out, in)
+	return out
+}
+
+func cloneInvestigation(in domain.Investigation) domain.Investigation {
+	out := in
+	if in.TriggerImpacts != nil {
+		out.TriggerImpacts = make(map[string]string, len(in.TriggerImpacts))
+		for key, value := range in.TriggerImpacts {
+			out.TriggerImpacts[key] = value
+		}
+	}
 	return out
 }
 
