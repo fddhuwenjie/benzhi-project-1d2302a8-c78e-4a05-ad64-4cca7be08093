@@ -73,41 +73,28 @@ func (r *Repository) appendEvents(events []domain.AuditEvent) error {
 	if len(events) == 0 {
 		return nil
 	}
-	if r.eventFile == nil {
-		f, err := os.OpenFile(r.eventPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
-		if err != nil {
-			return fmt.Errorf("打开审计日志: %w", err)
-		}
-		r.eventFile = f
+	f, err := os.OpenFile(r.eventPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
+	if err != nil {
+		return fmt.Errorf("打开审计日志: %w", err)
 	}
-	w := bufio.NewWriter(r.eventFile)
+	defer f.Close()
+	w := bufio.NewWriter(f)
 	for _, event := range events {
 		raw, err := json.Marshal(event)
 		if err != nil {
-			r.discardEventFile()
 			return err
 		}
 		if _, err := w.Write(append(raw, '\n')); err != nil {
-			r.discardEventFile()
 			return err
 		}
 	}
 	if err := w.Flush(); err != nil {
-		r.discardEventFile()
 		return err
 	}
-	if err := r.eventFile.Sync(); err != nil {
-		r.discardEventFile()
+	if err := f.Sync(); err != nil {
 		return err
 	}
 	return nil
-}
-
-func (r *Repository) discardEventFile() {
-	if r.eventFile != nil {
-		_ = r.eventFile.Close()
-		r.eventFile = nil
-	}
 }
 
 func atomicSnapshot(dir, path string, data snapshot) error {

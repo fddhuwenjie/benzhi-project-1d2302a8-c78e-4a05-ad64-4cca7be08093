@@ -17,7 +17,6 @@ type Repository struct {
 	dir          string
 	snapshotPath string
 	eventPath    string
-	eventFile    *os.File
 	data         snapshot
 }
 
