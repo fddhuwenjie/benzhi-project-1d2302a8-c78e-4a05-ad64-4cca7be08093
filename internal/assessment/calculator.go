@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"specimen-transit-guard/internal/domain"
@@ -12,6 +13,7 @@ import (
 
 type Calculator struct {
 	rules          Rules
+	mu             sync.RWMutex
 	readingsByHash map[[sha256.Size]byte][]domain.TemperatureReading
 }
 
@@ -76,12 +78,24 @@ func (c *Calculator) Evaluate(id string, tc domain.TransitCase, evidence domain.
 func (c *Calculator) sortedReadings(input []domain.TemperatureReading) []domain.TemperatureReading {
 	raw, _ := json.Marshal(input)
 	key := sha256.Sum256(raw)
-	if cached, ok := c.readingsByHash[key]; ok {
+
+	c.mu.RLock()
+	cached, ok := c.readingsByHash[key]
+	c.mu.RUnlock()
+	if ok {
 		return append([]domain.TemperatureReading(nil), cached...)
 	}
+
 	readings := append([]domain.TemperatureReading(nil), input...)
 	sort.Slice(readings, func(i, j int) bool { return readings[i].RecordedAt.Before(readings[j].RecordedAt) })
-	c.readingsByHash[key] = append([]domain.TemperatureReading(nil), readings...)
+	stored := append([]domain.TemperatureReading(nil), readings...)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if existing, ok := c.readingsByHash[key]; ok {
+		return append([]domain.TemperatureReading(nil), existing...)
+	}
+	c.readingsByHash[key] = stored
 	return readings
 }
 
