@@ -59,10 +59,11 @@ func (r *Repository) rebuildIndexes() {
 }
 
 func (r *Repository) persistLocked(next snapshot, events []domain.AuditEvent) error {
-	if err := appendEvents(r.eventPath, events); err != nil {
+	if err := atomicSnapshot(r.dir, r.snapshotPath, next); err != nil {
 		return err
 	}
-	if err := atomicSnapshot(r.dir, r.snapshotPath, next); err != nil {
+	if err := appendEvents(r.eventPath, events); err != nil {
+		r.data = next
 		return err
 	}
 	r.data = next
