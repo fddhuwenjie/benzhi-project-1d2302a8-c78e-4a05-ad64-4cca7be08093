@@ -43,5 +43,8 @@ func (s *Service) Assess(cmd AssessCommand) (CaseResult, error) {
 	}
 	result := CaseResult{Case: next, Assessment: &assessmentResult}
 	err = s.repo.Commit(next, cmd.ExpectedRevision, store.Mutation{Assessment: &assessmentResult}, []domain.AuditEvent{event}, scope, cmd.IdempotencyKey, result)
+	if err == nil {
+		s.invalidateAuditCache(cmd.CaseID)
+	}
 	return result, err
 }

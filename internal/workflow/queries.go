@@ -72,6 +72,18 @@ func (s *Service) Audit(caseID string, offset, limit int) (AuditPage, error) {
 	return page, nil
 }
 
+// invalidateAuditCache drops every cached audit page for the given case so that
+// subsequent queries observe freshly persisted events after a successful write.
+func (s *Service) invalidateAuditCache(caseID string) {
+	s.auditMu.Lock()
+	for key := range s.auditCache {
+		if key.caseID == caseID {
+			delete(s.auditCache, key)
+		}
+	}
+	s.auditMu.Unlock()
+}
+
 func cloneAuditPage(page AuditPage) AuditPage {
 	result := page
 	result.Items = make([]domain.AuditEvent, len(page.Items))

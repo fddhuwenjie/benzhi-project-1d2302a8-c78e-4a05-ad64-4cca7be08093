@@ -59,6 +59,9 @@ func (s *Service) ReceiveEvidence(cmd EvidenceCommand) (CaseResult, error) {
 	}
 	result := CaseResult{Case: next, EvidenceProgress: &progress}
 	err = s.repo.Commit(next, cmd.ExpectedRevision, store.Mutation{Readings: newReadings, Evidence: &evidence}, []domain.AuditEvent{event}, scope, cmd.IdempotencyKey, result)
+	if err == nil {
+		s.invalidateAuditCache(cmd.CaseID)
+	}
 	return result, err
 }
 

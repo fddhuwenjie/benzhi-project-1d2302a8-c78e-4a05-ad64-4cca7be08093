@@ -70,6 +70,9 @@ func (s *Service) Verify(cmd VerifyCommand) (CaseResult, error) {
 	}
 	result := CaseResult{Case: next, Assessment: data.Assessment}
 	err = s.repo.Commit(next, cmd.ExpectedRevision, store.Mutation{Action: &verified, UpdateAction: true}, []domain.AuditEvent{event}, scope, cmd.IdempotencyKey, result)
+	if err == nil {
+		s.invalidateAuditCache(cmd.CaseID)
+	}
 	return result, err
 }
 
@@ -124,5 +127,8 @@ func (s *Service) ClosePassed(cmd CloseCommand) (CaseResult, error) {
 	}
 	result := CaseResult{Case: next, Assessment: data.Assessment}
 	err = s.repo.Commit(next, cmd.ExpectedRevision, store.Mutation{}, []domain.AuditEvent{event}, scope, cmd.IdempotencyKey, result)
+	if err == nil {
+		s.invalidateAuditCache(cmd.CaseID)
+	}
 	return result, err
 }

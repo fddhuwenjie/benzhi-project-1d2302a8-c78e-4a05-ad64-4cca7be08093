@@ -55,6 +55,9 @@ func (s *Service) Investigate(cmd InvestigateCommand) (CaseResult, error) {
 	}
 	result := CaseResult{Case: next, Assessment: data.Assessment}
 	err = s.repo.Commit(next, cmd.ExpectedRevision, store.Mutation{Investigation: &inv}, []domain.AuditEvent{event}, scope, cmd.IdempotencyKey, result)
+	if err == nil {
+		s.invalidateAuditCache(cmd.CaseID)
+	}
 	return result, err
 }
 
@@ -116,6 +119,9 @@ func (s *Service) SubmitCorrection(cmd CorrectCommand) (CaseResult, error) {
 	deadline := &domain.DeadlineProjection{Status: deadlineStatus, DueAt: due, SubmittedAt: timePointer(ctx.Now), OverdueMinutes: overdueMinutes}
 	result := CaseResult{Case: next, Assessment: data.Assessment, Deadline: deadline}
 	err = s.repo.Commit(next, cmd.ExpectedRevision, store.Mutation{Action: &action}, []domain.AuditEvent{event}, scope, cmd.IdempotencyKey, result)
+	if err == nil {
+		s.invalidateAuditCache(cmd.CaseID)
+	}
 	return result, err
 }
 

@@ -97,6 +97,7 @@ func (s *Service) Register(cmd RegisterCommand) (CaseResult, error) {
 	if err := s.repo.Create(c, []domain.AuditEvent{event}, scope, cmd.IdempotencyKey, fingerprint, result); err != nil {
 		return CaseResult{}, err
 	}
+	s.invalidateAuditCache(c.ID)
 	return result, nil
 }
 
