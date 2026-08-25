@@ -14,6 +14,12 @@ type AuditPage struct {
 	Total  int                 `json:"total"`
 }
 
+type auditCacheKey struct {
+	caseID string
+	offset int
+	limit  int
+}
+
 type EvidenceCatalogItem struct {
 	Reference string `json:"reference"`
 	Kind      string `json:"kind"`
@@ -45,14 +51,35 @@ type ClosureSummary struct {
 }
 
 func (s *Service) Audit(caseID string, offset, limit int) (AuditPage, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	key := auditCacheKey{caseID: caseID, offset: offset, limit: limit}
+	s.auditMu.RLock()
+	cached, ok := s.auditCache[key]
+	s.auditMu.RUnlock()
+	if ok {
+		return cloneAuditPage(cached), nil
+	}
 	items, total, err := s.repo.Audit(caseID, offset, limit)
 	if err != nil {
 		return AuditPage{}, err
 	}
-	if limit <= 0 || limit > 200 {
-		limit = 50
+	page := AuditPage{Items: items, Offset: offset, Limit: limit, Total: total}
+	s.auditMu.Lock()
+	s.auditCache[key] = cloneAuditPage(page)
+	s.auditMu.Unlock()
+	return page, nil
+}
+
+func cloneAuditPage(page AuditPage) AuditPage {
+	result := page
+	result.Items = make([]domain.AuditEvent, len(page.Items))
+	for i, event := range page.Items {
+		result.Items[i] = event
+		result.Items[i].Payload = append([]byte(nil), event.Payload...)
 	}
-	return AuditPage{Items: items, Offset: offset, Limit: limit, Total: total}, nil
+	return result
 }
 
 func (s *Service) Summary(caseID string) (ClosureSummary, error) {

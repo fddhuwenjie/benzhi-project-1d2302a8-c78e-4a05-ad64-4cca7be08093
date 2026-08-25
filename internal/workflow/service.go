@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"specimen-transit-guard/internal/assessment"
@@ -18,10 +19,12 @@ type Service struct {
 	repo       *store.Repository
 	calculator *assessment.Calculator
 	now        func() time.Time
+	auditMu    sync.RWMutex
+	auditCache map[auditCacheKey]AuditPage
 }
 
 func New(repo *store.Repository, calculator *assessment.Calculator) *Service {
-	return &Service{repo: repo, calculator: calculator, now: time.Now}
+	return &Service{repo: repo, calculator: calculator, now: time.Now, auditCache: make(map[auditCacheKey]AuditPage)}
 }
 
 func (s *Service) context(meta Metadata) (domain.ChangeContext, error) {
