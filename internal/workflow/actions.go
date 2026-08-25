@@ -17,8 +17,11 @@ func (s *Service) Investigate(cmd InvestigateCommand) (CaseResult, error) {
 		return CaseResult{}, err
 	}
 	scope := "investigation:" + cmd.CaseID
+	fingerprintCommand := cmd
+	fingerprintCommand.Metadata = Metadata{}
+	fingerprint := commandFingerprint(fingerprintCommand)
 	var prior CaseResult
-	if ok, err := s.repo.Idempotent(scope, cmd.IdempotencyKey, "", &prior); ok || err != nil {
+	if ok, err := s.repo.Idempotent(scope, cmd.IdempotencyKey, fingerprint, &prior); ok || err != nil {
 		return prior, err
 	}
 	data, err := s.repo.GetCase(cmd.CaseID)
@@ -67,8 +70,11 @@ func (s *Service) SubmitCorrection(cmd CorrectCommand) (CaseResult, error) {
 		return CaseResult{}, err
 	}
 	scope := "correction:" + cmd.CaseID
+	fingerprintCommand := cmd
+	fingerprintCommand.Metadata = Metadata{}
+	fingerprint := commandFingerprint(fingerprintCommand)
 	var prior CaseResult
-	if ok, err := s.repo.Idempotent(scope, cmd.IdempotencyKey, "", &prior); ok || err != nil {
+	if ok, err := s.repo.Idempotent(scope, cmd.IdempotencyKey, fingerprint, &prior); ok || err != nil {
 		return prior, err
 	}
 	data, err := s.repo.GetCase(cmd.CaseID)

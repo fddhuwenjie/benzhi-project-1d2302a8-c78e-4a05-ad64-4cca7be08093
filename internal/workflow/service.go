@@ -58,6 +58,10 @@ func RegistrationFingerprint(shipmentCode, containerCode, sampleCategory string,
 		ShipmentCode, ContainerCode, SampleCategory string
 		TemperatureMinC, TemperatureMaxC            float64
 	}{strings.ToUpper(strings.TrimSpace(shipmentCode)), strings.ToUpper(strings.TrimSpace(containerCode)), strings.ToLower(strings.TrimSpace(sampleCategory)), minC, maxC}
+	return commandFingerprint(payload)
+}
+
+func commandFingerprint(payload any) string {
 	raw, _ := json.Marshal(payload)
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])

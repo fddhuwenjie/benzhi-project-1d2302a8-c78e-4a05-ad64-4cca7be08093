@@ -14,8 +14,11 @@ func (s *Service) Assess(cmd AssessCommand) (CaseResult, error) {
 		return CaseResult{}, err
 	}
 	scope := "assessment:" + cmd.CaseID
+	fingerprintCommand := cmd
+	fingerprintCommand.Metadata = Metadata{}
+	fingerprint := commandFingerprint(fingerprintCommand)
 	var prior CaseResult
-	if ok, err := s.repo.Idempotent(scope, cmd.IdempotencyKey, "", &prior); ok || err != nil {
+	if ok, err := s.repo.Idempotent(scope, cmd.IdempotencyKey, fingerprint, &prior); ok || err != nil {
 		return prior, err
 	}
 	data, err := s.repo.GetCase(cmd.CaseID)
