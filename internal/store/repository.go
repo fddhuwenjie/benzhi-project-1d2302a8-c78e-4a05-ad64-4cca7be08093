@@ -109,17 +109,10 @@ func (r *Repository) Create(c domain.TransitCase, events []domain.AuditEvent, sc
 }
 
 func (r *Repository) Commit(nextCase domain.TransitCase, expected int64, mutation Mutation, events []domain.AuditEvent, scope, key string, result any) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	current, ok := r.data.Cases[nextCase.ID]
-	if !ok {
-		return domain.ErrNotFound
+	next, err := r.prepareCommit(nextCase, expected)
+	if err != nil {
+		return err
 	}
-	if current.Revision != expected || nextCase.Revision <= current.Revision {
-		return domain.ErrConflict
-	}
-	next := cloneSnapshot(r.data)
-	next.Cases[nextCase.ID] = nextCase
 	if len(mutation.Readings) > 0 {
 		next.Readings[nextCase.ID] = append(next.Readings[nextCase.ID], mutation.Readings...)
 	}
@@ -152,6 +145,27 @@ func (r *Repository) Commit(nextCase domain.TransitCase, expected int64, mutatio
 	if err := putIdempotency(&next, scope, key, "", result); err != nil {
 		return err
 	}
+	return r.publishCommit(next, events)
+}
+
+func (r *Repository) prepareCommit(nextCase domain.TransitCase, expected int64) (snapshot, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	current, ok := r.data.Cases[nextCase.ID]
+	if !ok {
+		return snapshot{}, domain.ErrNotFound
+	}
+	if current.Revision != expected || nextCase.Revision <= current.Revision {
+		return snapshot{}, domain.ErrConflict
+	}
+	next := cloneSnapshot(r.data)
+	next.Cases[nextCase.ID] = nextCase
+	return next, nil
+}
+
+func (r *Repository) publishCommit(next snapshot, events []domain.AuditEvent) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.persistLocked(next, events)
 }
 
