@@ -1,6 +1,8 @@
 package assessment
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -8,9 +10,14 @@ import (
 	"specimen-transit-guard/internal/domain"
 )
 
-type Calculator struct{ rules Rules }
+type Calculator struct {
+	rules          Rules
+	readingsByHash map[[sha256.Size]byte][]domain.TemperatureReading
+}
 
-func New(rules Rules) *Calculator { return &Calculator{rules: rules} }
+func New(rules Rules) *Calculator {
+	return &Calculator{rules: rules, readingsByHash: make(map[[sha256.Size]byte][]domain.TemperatureReading)}
+}
 
 func (c *Calculator) CoverageSlop() time.Duration { return c.rules.CoverageSlop }
 
@@ -18,8 +25,7 @@ func (c *Calculator) Evaluate(id string, tc domain.TransitCase, evidence domain.
 	if len(input) < c.rules.MinimumReadings {
 		return domain.DeviationAssessment{}, fmt.Errorf("%w: 至少需要 %d 条温度读数", domain.ErrEvidenceIncomplete, c.rules.MinimumReadings)
 	}
-	readings := append([]domain.TemperatureReading(nil), input...)
-	sort.Slice(readings, func(i, j int) bool { return readings[i].RecordedAt.Before(readings[j].RecordedAt) })
+	readings := c.sortedReadings(input)
 	missingCoverage := make([]string, 0, 2)
 	if readings[0].RecordedAt.Sub(evidence.TransportStartedAt) > c.rules.CoverageSlop {
 		missingCoverage = append(missingCoverage, "缺少运输起点温度覆盖")
@@ -65,6 +71,18 @@ func (c *Calculator) Evaluate(id string, tc domain.TransitCase, evidence domain.
 		result.Severity = domain.SeverityMajor
 	}
 	return result, nil
+}
+
+func (c *Calculator) sortedReadings(input []domain.TemperatureReading) []domain.TemperatureReading {
+	raw, _ := json.Marshal(input)
+	key := sha256.Sum256(raw)
+	if cached, ok := c.readingsByHash[key]; ok {
+		return append([]domain.TemperatureReading(nil), cached...)
+	}
+	readings := append([]domain.TemperatureReading(nil), input...)
+	sort.Slice(readings, func(i, j int) bool { return readings[i].RecordedAt.Before(readings[j].RecordedAt) })
+	c.readingsByHash[key] = append([]domain.TemperatureReading(nil), readings...)
+	return readings
 }
 
 func addTrigger(out *domain.DeviationAssessment, id, kind, summary string) {
