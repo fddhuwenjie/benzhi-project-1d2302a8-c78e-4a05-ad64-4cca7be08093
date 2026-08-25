@@ -20,16 +20,30 @@ type Repository struct {
 	data         snapshot
 }
 
+type RecoveryError struct {
+	Stage  string
+	Path   string
+	Detail string
+}
+
+func (e *RecoveryError) Error() string {
+	return fmt.Sprintf("恢复%s失败 (%s): %s", e.Stage, e.Path, e.Detail)
+}
+
+func newRecoveryError(stage, path, detail string) error {
+	return &RecoveryError{Stage: stage, Path: path, Detail: detail}
+}
+
 func Open(dir string) (*Repository, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("创建数据目录: %w", err)
 	}
 	r := &Repository{dir: dir, snapshotPath: filepath.Join(dir, "snapshot.json"), eventPath: filepath.Join(dir, "events.jsonl"), data: emptySnapshot()}
 	if err := r.loadSnapshot(); err != nil {
-		return nil, err
+		return nil, newRecoveryError("快照", r.snapshotPath, err.Error())
 	}
 	if err := r.validateEventLog(); err != nil {
-		return nil, err
+		return nil, newRecoveryError("审计日志", r.eventPath, err.Error())
 	}
 	r.rebuildIndexes()
 	return r, nil
