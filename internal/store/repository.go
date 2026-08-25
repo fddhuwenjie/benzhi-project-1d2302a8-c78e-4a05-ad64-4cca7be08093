@@ -18,13 +18,14 @@ type Repository struct {
 	snapshotPath string
 	eventPath    string
 	data         snapshot
+	caseCache    map[string]CaseData
 }
 
 func Open(dir string) (*Repository, error) {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("创建数据目录: %w", err)
 	}
-	r := &Repository{dir: dir, snapshotPath: filepath.Join(dir, "snapshot.json"), eventPath: filepath.Join(dir, "events.jsonl"), data: emptySnapshot()}
+	r := &Repository{dir: dir, snapshotPath: filepath.Join(dir, "snapshot.json"), eventPath: filepath.Join(dir, "events.jsonl"), data: emptySnapshot(), caseCache: map[string]CaseData{}}
 	if err := r.loadSnapshot(); err != nil {
 		return nil, err
 	}
@@ -36,13 +37,18 @@ func Open(dir string) (*Repository, error) {
 }
 
 func (r *Repository) GetCase(id string) (CaseData, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cached, ok := r.caseCache[id]; ok {
+		return cached, nil
+	}
 	c, ok := r.data.Cases[id]
 	if !ok {
 		return CaseData{}, domain.ErrNotFound
 	}
-	return r.caseDataLocked(c), nil
+	data := r.caseDataLocked(c)
+	r.caseCache[id] = data
+	return data, nil
 }
 
 func (r *Repository) FindByShipment(code string) (CaseData, error) {
@@ -105,7 +111,10 @@ func (r *Repository) Create(c domain.TransitCase, events []domain.AuditEvent, sc
 	if err := putIdempotency(&next, scope, key, fingerprint, result); err != nil {
 		return err
 	}
-	return r.persistLocked(next, events)
+	if err := r.persistLocked(next, events); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *Repository) Commit(nextCase domain.TransitCase, expected int64, mutation Mutation, events []domain.AuditEvent, scope, key string, result any) error {
@@ -152,7 +161,11 @@ func (r *Repository) Commit(nextCase domain.TransitCase, expected int64, mutatio
 	if err := putIdempotency(&next, scope, key, "", result); err != nil {
 		return err
 	}
-	return r.persistLocked(next, events)
+	if err := r.persistLocked(next, events); err != nil {
+		return err
+	}
+	delete(r.caseCache, nextCase.ID)
+	return nil
 }
 
 func putIdempotency(s *snapshot, scope, key, fingerprint string, result any) error {
