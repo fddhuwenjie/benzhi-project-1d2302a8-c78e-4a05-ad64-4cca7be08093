@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -64,6 +65,10 @@ func RegistrationFingerprint(shipmentCode, containerCode, sampleCategory string,
 }
 
 func (s *Service) Register(cmd RegisterCommand) (CaseResult, error) {
+	return s.RegisterContext(context.Background(), cmd)
+}
+
+func (s *Service) RegisterContext(_ context.Context, cmd RegisterCommand) (CaseResult, error) {
 	if err := requireIdempotency(cmd.Metadata); err != nil {
 		return CaseResult{}, err
 	}

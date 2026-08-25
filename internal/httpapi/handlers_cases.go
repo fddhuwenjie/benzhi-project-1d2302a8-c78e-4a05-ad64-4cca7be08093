@@ -26,7 +26,7 @@ func (a *API) RegisterCase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	result, err := a.service.Register(workflow.RegisterCommand{Metadata: meta, ShipmentCode: body.ShipmentCode, ContainerCode: body.ContainerCode,
+	result, err := a.service.RegisterContext(r.Context(), workflow.RegisterCommand{Metadata: meta, ShipmentCode: body.ShipmentCode, ContainerCode: body.ContainerCode,
 		SampleCategory: body.SampleCategory, TemperatureMinC: body.TemperatureMinC, TemperatureMaxC: body.TemperatureMaxC,
 		RequestFingerprint: workflow.RegistrationFingerprint(body.ShipmentCode, body.ContainerCode, body.SampleCategory, body.TemperatureMinC, body.TemperatureMaxC)})
 	if err != nil {
